@@ -10,14 +10,14 @@ const app = new App({
 // Global Admin Password
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
-// Handle Slack's URL verification challenge (add this part)
+// Handle Slack's URL verification challenge
 app.post('/slack/events', (req, res) => {
-    if (req.body.type === 'url_verification') {
-      res.status(200).send(req.body.challenge); // Respond with the challenge parameter
-    } else {
-      res.status(200).send(); // For other event types, acknowledge the request
-    }
-  });
+  if (req.body.type === 'url_verification') {
+    res.status(200).send(req.body.challenge); // Respond with the challenge parameter
+  } else {
+    res.status(200).send(); // For other event types, acknowledge the request
+  }
+});
 
 // Welcome message on user join
 app.event('team_join', async ({ event, client }) => {
@@ -279,156 +279,22 @@ app.command('/start-idea', async ({ command, ack, client }) => {
           {
             text: "Approve or Decline the submission:",
             fallback: "Approve or Decline",
-            callback_id: "social_post_review",
+            callback_id: "social_post_approval",
             actions: [
-              {
-                name: "approve",
-                text: "Approve",
-                type: "button",
-                value: `approve_${caseId}`,
-                style: "primary",
-              },
-              {
-                name: "decline",
-                text: "Decline",
-                type: "button",
-                value: `decline_${caseId}`,
-                style: "danger",
-              },
-            ],
-          },
+              { name: "approve", text: "Approve", type: "button", value: "approve" },
+              { name: "decline", text: "Decline", type: "button", value: "decline" }
+            ]
+          }
         ],
       });
     } catch (error) {
-      console.error('Error submitting social post:', error);
-    }
-  });
-
-  // Listen for messages in the submitter's thread
-app.message(async ({ message, client }) => {
-    // Check if the message is in a thread and has a Case ID
-    if (message.thread_ts && message.text && message.channel_type === 'im') {
-      const caseIdMatch = message.text.match(/Case ID: ([A-Z0-9]+)/i);
-  
-      if (caseIdMatch) {
-        const caseId = caseIdMatch[1];
-  
-        try {
-          // Find the thread in the Social Post Channel
-          const result = await client.conversations.history({
-            channel: 'C089BE0DJL8',
-            latest: message.thread_ts,
-            inclusive: true,
-            limit: 1,
-          });
-  
-          const threadMessage = result.messages[0];
-  
-          if (threadMessage && threadMessage.text.includes(`*Case ID:* ${caseId}`)) {
-            // Post the message in the corresponding thread in the Social Post Channel
-            await client.chat.postMessage({
-              channel: 'C089BE0DJL8',
-              thread_ts: threadMessage.ts,
-              text: `<@${message.user}> sent the following:`,
-              attachments: [
-                {
-                  text: message.text,
-                },
-              ],
-            });
-          }
-        } catch (error) {
-          console.error('Error syncing thread message from submitter:', error);
-        }
-      }
+      console.error('Error handling social post submission:', error);
     }
   });
   
-  // Listen for messages in the Social Post Channel thread
-  app.message(async ({ message, client }) => {
-    // Check if the message is in a thread and has a Case ID
-    if (message.thread_ts && message.channel === 'C089BE0DJL8') {
-      const caseIdMatch = message.text.match(/Case ID: ([A-Z0-9]+)/i);
-  
-      if (caseIdMatch) {
-        const caseId = caseIdMatch[1];
-  
-        try {
-          // DM the submitter with the message from the thread
-          const threadMessage = await client.conversations.history({
-            channel: message.channel,
-            latest: message.thread_ts,
-            inclusive: true,
-            limit: 1,
-          });
-  
-          const submitterMatch = threadMessage.messages[0]?.text.match(/<@([A-Z0-9]+)>/);
-  
-          if (submitterMatch) {
-            const submitterId = submitterMatch[1];
-  
-            await client.chat.postMessage({
-              channel: submitterId,
-              text: `In the thread for your submission (*Case ID:* ${caseId}), someone said:`,
-              attachments: [
-                {
-                  text: message.text,
-                },
-              ],
-            });
-          }
-        } catch (error) {
-          console.error('Error syncing thread message to submitter:', error);
-        }
-      }
-    }
-  });
-  
-  
-  // Approve or Decline Social Post
-  app.action(/(approve|decline)_(.+)/, async ({ body, ack, client, action }) => {
-    await ack();
-    const [decision, caseId] = action.value.split('_');
-    const userId = body.user.id;
-  
-    const status = decision === 'approve' ? 'Approved' : 'Declined';
-    const color = decision === 'approve' ? 'good' : 'danger';
-  
-    try {
-      // Notify the user who submitted the form
-      await client.chat.postMessage({
-        channel: body.user.id,
-        text: `Your submission with Case ID *${caseId}* has been *${status}*.`,
-      });
-  
-      // Update the thread in the Social Post Channel
-      await client.chat.postMessage({
-        channel: body.channel.id,
-        thread_ts: body.message.ts,
-        text: `<@${userId}> has *${status}* the submission with Case ID *${caseId}*.`,
-        attachments: [
-          {
-            color,
-            text: `${status} by <@${userId}>`,
-          },
-        ],
-      });
-    } catch (error) {
-      console.error('Error processing review:', error);
-    }
-  });
-  
-
-app.message('send motivational quote', async ({ message, say }) => {
-  const quote = await fetchQuote();
-  await say({
-    channel: 'C088R5BN8AY',
-    text: quote,
-  });
-});
-
-// Start the app
+// Start your app
 (async () => {
-  await app.start(process.env.PORT || 3000);
-  console.log('⚡️ Slack bot is running!');
+  const port = process.env.PORT || 3000;
+  await app.start(port);
+  console.log(`App is running on port ${port}`);
 })();
